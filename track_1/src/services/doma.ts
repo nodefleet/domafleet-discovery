@@ -136,3 +136,62 @@ export async function getOffers({ tokenId, take = 10, skip = 0 }: { tokenId?: st
 }
 
 
+// Nuevos endpoints solicitados
+export async function getDomainInfo(name: string) {
+  const query = `
+    query GetDomainInfo($name: String!) {
+      name(name: $name) {
+        id
+        name
+        tokenId
+        owner
+        isActive
+        isListed
+        price { amount, currency, usdValue }
+      }
+    }
+  `
+  return fetchDoma<{ name: { id: string; name: string; tokenId?: string; owner?: string; isActive?: boolean; isListed?: boolean; price?: { amount?: number; currency?: string; usdValue?: number } } }>({
+    query,
+    variables: { name },
+  })
+}
+
+export async function getDomainActivities2(name: string, take: number) {
+  const query = `
+    query GetDomainActivities($name: String!, $take: Int!) {
+      nameActivities(name: $name, take: $take, sortOrder: DESC) {
+        items {
+          type
+          timestamp
+          transactionHash
+          value
+        }
+      }
+    }
+  `
+  return fetchDoma<{ nameActivities: { items: { type: string; timestamp: string; transactionHash?: string; value?: string }[] } }>({
+    query,
+    variables: { name, take },
+  })
+}
+
+export async function getDomainListingsBySld(sld: string) {
+  const query = `
+    query GetDomainListings($sld: String!) {
+      listings(sld: $sld, take: 10) {
+        items {
+          price
+          currency
+          seller
+          createdAt
+        }
+      }
+    }
+  `
+  return fetchDoma<{ listings: { items: { price: string | number; currency: string; seller: string; createdAt: string }[] } }>({
+    query,
+    variables: { sld },
+  })
+}
+
