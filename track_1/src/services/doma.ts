@@ -1,9 +1,7 @@
 import axios, { AxiosError } from 'axios'
 
-const envEndpoint = ((import.meta as any).env?.VITE_DOMA_GRAPHQL_ENDPOINT as string | undefined)
-// Usar SIEMPRE el proxy relativo; Netlify (_redirects) lo envía al host destino
-const defaultEndpoint = '/doma/graphql'
-const DOMA_TESTNET_ENDPOINT = envEndpoint || defaultEndpoint
+// Redirigido al backend interno
+const BACKEND_GRAPHQL_ENDPOINT = '/api/doma/graphql'
 
 export type GraphQLRequest = {
   query: string
@@ -11,16 +9,11 @@ export type GraphQLRequest = {
 }
 
 export async function fetchDoma<T>({ query, variables }: GraphQLRequest): Promise<T> {
-  const apiKey = (import.meta as any).env?.VITE_DOMA_API_KEY as string | undefined
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (apiKey) {
-    headers['X-Api-Key'] = apiKey
-    headers['Api-Key'] = apiKey
-  }
 
   try {
     const { data } = await axios.post(
-      DOMA_TESTNET_ENDPOINT,
+      BACKEND_GRAPHQL_ENDPOINT,
       { query, variables },
       { headers, timeout: 15000, withCredentials: false }
     )
@@ -28,11 +21,11 @@ export async function fetchDoma<T>({ query, variables }: GraphQLRequest): Promis
     if (data?.errors) {
       const missingApiKey = Array.isArray(data.errors) && data.errors.some((e: any) => /API Key is missing/i.test(e?.message))
       if (missingApiKey) {
-        throw new Error('DOMA GraphQL 401: falta API Key. Define VITE_DOMA_API_KEY en track_1/.env y reinicia el dev server.')
+        throw new Error('DOMA GraphQL 401: falta API Key en backend. Define DOMA_API_KEY en track_1/backend/.env y reinicia el backend.')
       }
       const ipNotAllowed = Array.isArray(data.errors) && data.errors.some((e: any) => /IP address not allowed/i.test(e?.message))
       if (ipNotAllowed) {
-        throw new Error('DOMA GraphQL 401: IP no permitida para esa API Key. Actualiza la whitelist de IPs en DOMA o usa otra clave.')
+        throw new Error('DOMA GraphQL 401: IP del backend no permitida para esa API Key. Actualiza la whitelist de IPs en DOMA o usa otra clave.')
       }
       throw new Error(`DOMA GraphQL errors: ${JSON.stringify(data.errors)}`)
     }
@@ -47,10 +40,10 @@ export async function fetchDoma<T>({ query, variables }: GraphQLRequest): Promis
       const status = axiosErr.response.status
       const text = JSON.stringify(axiosErr.response.data)
       if (status === 401 && /IP address not allowed/i.test(text)) {
-        throw new Error('DOMA GraphQL 401: IP no permitida para esa API Key. Actualiza la whitelist de IPs en DOMA o usa otra clave.')
+        throw new Error('DOMA GraphQL 401: IP del backend no permitida para esa API Key. Actualiza la whitelist de IPs en DOMA o usa otra clave.')
       }
       if (status === 401 && /API Key is missing/i.test(text)) {
-        throw new Error('DOMA GraphQL 401: falta API Key. Define VITE_DOMA_API_KEY en track_1/.env y reinicia el dev server.')
+        throw new Error('DOMA GraphQL 401: falta API Key en backend. Define DOMA_API_KEY en track_1/backend/.env y reinicia el backend.')
       }
       throw new Error(`DOMA GraphQL error: ${status} ${text}`)
     }
