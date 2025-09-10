@@ -1,8 +1,8 @@
 import axios, { AxiosError } from 'axios'
 
 const envEndpoint = ((import.meta as any).env?.VITE_DOMA_GRAPHQL_ENDPOINT as string | undefined)
-const isProd = Boolean((import.meta as any).env?.PROD)
-const defaultEndpoint = isProd ? 'https://api-testnet.doma.xyz/graphql' : '/doma/graphql'
+// Usar SIEMPRE el proxy relativo; Netlify (_redirects) lo envía al host destino
+const defaultEndpoint = '/doma/graphql'
 const DOMA_TESTNET_ENDPOINT = envEndpoint || defaultEndpoint
 
 export type GraphQLRequest = {
