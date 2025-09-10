@@ -11,7 +11,7 @@ export default function App() {
       <Navbar />
       <main className="container">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={< Marketplace />} />
           <Route path="/track-1" element={<TrackOne />} />
           <Route path="/market" element={<Marketplace />} />
           <Route path="/name/:name" element={<NameDetail />} />
