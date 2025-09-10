@@ -9,6 +9,16 @@ export default defineConfig({
       '@': '/src',
     },
   },
+  server: {
+    proxy: {
+      '/doma': {
+        target: 'https://api-testnet.doma.xyz',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/doma/, ''),
+      },
+    },
+  },
 })
 
 
