@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { domaGraphql } from '../domaClient.js'
+import { domaGraphql } from '../domaClient'
 
 const router = Router()
 
@@ -24,11 +24,11 @@ router.get('/names', async (req, res) => {
       : undefined
     const registrarIanaIds = req.query.registrarIanaIds
       ? (Array.isArray(req.query.registrarIanaIds)
-        ? (req.query.registrarIanaIds as string[])
-        : [String(req.query.registrarIanaIds)]
-      )
-        .map((v) => Number(v))
-        .filter((n) => !Number.isNaN(n))
+          ? (req.query.registrarIanaIds as string[])
+          : [String(req.query.registrarIanaIds)]
+        )
+          .map((v) => Number(v))
+          .filter((n) => !Number.isNaN(n))
       : undefined
     const claimStatus = (req.query.claimStatus as 'CLAIMED' | 'UNCLAIMED' | 'ALL' | undefined) || undefined
 

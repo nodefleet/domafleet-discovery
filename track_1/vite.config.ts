@@ -11,11 +11,16 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/doma': {
-        target: 'https://api-testnet.doma.xyz',
+      // Proxy opcional en dev si se desea enrutar /api y /health vía Vite
+      '/api': {
+        target: 'https://api.domafleet.io',
         changeOrigin: true,
         secure: true,
-        rewrite: (path) => path.replace(/^\/doma/, ''),
+      },
+      '/health': {
+        target: 'https://api.domafleet.io',
+        changeOrigin: true,
+        secure: true,
       },
     },
   },

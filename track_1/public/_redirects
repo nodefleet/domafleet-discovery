@@ -1,2 +1,3 @@
-/doma/* https://api-testnet.doma.xyz/:splat 200
 /* /index.html 200
+/api/* https://api.domafleet.io/api/:splat 200
+/health https://api.domafleet.io/health 200

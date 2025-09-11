@@ -1,14 +1,42 @@
 import axios from 'axios'
 
 const api = axios.create({
-  // Asume mismo host/origen del frontend; usa rutas relativas
-  baseURL: '',
+  // Usa el backend desplegado de DOMAFleet
+  baseURL: 'https://api.domafleet.io',
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
   withCredentials: false,
 })
 
 export type NameDescriptor = { sld: string; tld: string }
+
+export async function searchNames(params: { name?: string; tlds?: string[]; take?: number; skip?: number; sortOrder?: 'ASC' | 'DESC'; ownedBy?: string[]; networkIds?: string[]; registrarIanaIds?: number[]; claimStatus?: 'CLAIMED' | 'UNCLAIMED' | 'ALL' }) {
+  const qs = new URLSearchParams({
+    ...(params.name ? { name: params.name } : {}),
+    ...(params.tlds && params.tlds.length ? { tlds: params.tlds.join(',') } : {}),
+    ...(params.take != null ? { take: String(params.take) } : {}),
+    ...(params.skip != null ? { skip: String(params.skip) } : {}),
+    ...(params.sortOrder ? { sortOrder: params.sortOrder } : {}),
+    ...(params.claimStatus ? { claimStatus: params.claimStatus } : {}),
+  })
+  // Arrays repetibles
+  const repeatParams = new URLSearchParams()
+  params.ownedBy?.forEach((v) => repeatParams.append('ownedBy', v))
+  params.networkIds?.forEach((v) => repeatParams.append('networkIds', v))
+  params.registrarIanaIds?.forEach((v) => repeatParams.append('registrarIanaIds', String(v)))
+  const sep = qs.toString() && repeatParams.toString() ? '&' : ''
+  const fullQs = `${qs.toString()}${sep}${repeatParams.toString()}`
+  const { data } = await api.get(`/api/names?${fullQs}`)
+  return data as {
+    names: {
+      items: { name: string; expiresAt: string | null; tokenizedAt: string | null }[]
+      totalCount: number
+      currentPage: number
+      totalPages: number
+      hasNextPage: boolean
+    }
+  }
+}
 
 export async function healthcheck() {
   const { data } = await api.get('/health')

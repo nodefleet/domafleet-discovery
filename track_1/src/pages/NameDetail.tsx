@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { getDomainInfo, getDomainActivities2 } from '@/services/doma'
+import { getDomain, getDomainActivities } from '@/services/backend'
 
 export default function NameDetail() {
   const { name } = useParams()
@@ -33,15 +33,11 @@ export default function NameDetail() {
   useEffect(() => {
     if (!name) return
     let mounted = true
-    getDomainInfo(name)
-      .then((r) => {
-        if (mounted) setData(r.name)
-      })
+    getDomain(name)
+      .then((r) => { if (mounted) setData(r.name as any) })
       .catch((e) => setError(e.message))
-    getDomainActivities2(name, 20)
-      .then((r) => {
-        if (mounted) setActivities(r.nameActivities.items)
-      })
+    getDomainActivities(name, 20)
+      .then((r) => { if (mounted) setActivities(r.nameActivities.items as any) })
       .catch(() => { })
     return () => { mounted = false }
   }, [name])

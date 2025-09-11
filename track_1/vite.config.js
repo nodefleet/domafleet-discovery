@@ -10,11 +10,15 @@ export default defineConfig({
     },
     server: {
         proxy: {
-            '/doma': {
-                target: 'https://api-testnet.doma.xyz',
+            '/api': {
+                target: 'https://api.domafleet.io',
                 changeOrigin: true,
                 secure: true,
-                rewrite: function (path) { return path.replace(/^\/doma/, ''); },
+            },
+            '/health': {
+                target: 'https://api.domafleet.io',
+                changeOrigin: true,
+                secure: true,
             },
         },
     },
