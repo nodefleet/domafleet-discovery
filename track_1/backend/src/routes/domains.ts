@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { domaGraphql } from '../domaClient'
+import { domaGraphql } from '../domaClient.js'
 
 const router = Router()
 

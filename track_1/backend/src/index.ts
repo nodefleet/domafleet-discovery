@@ -1,11 +1,12 @@
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
-import { config } from './config'
-import domainsRouter from './routes/domains'
-import marketRouter from './routes/market'
-import offersRouter from './routes/offers'
-import { domaGraphql } from './domaClient'
+import { config } from './config.js'
+import domainsRouter from './routes/domains.js'
+import marketRouter from './routes/market.js'
+import offersRouter from './routes/offers.js'
+import namesRouter from './routes/names.js'
+import { domaGraphql } from './domaClient.js'
 
 const app = express()
 
@@ -32,6 +33,7 @@ app.post('/api/doma/graphql', async (req, res) => {
 app.use('/api/domains', domainsRouter)
 app.use('/api/market', marketRouter)
 app.use('/api/offers', offersRouter)
+app.use('/api', namesRouter)
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(config.port, () => {
