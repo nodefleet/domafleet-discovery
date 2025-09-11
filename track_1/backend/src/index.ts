@@ -1,12 +1,12 @@
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
-import { config } from './config.js'
-import domainsRouter from './routes/domains.js'
-import marketRouter from './routes/market.js'
-import offersRouter from './routes/offers.js'
-import namesRouter from './routes/names.js'
-import { domaGraphql } from './domaClient.js'
+import { config } from './config'
+import domainsRouter from './routes/domains'
+import marketRouter from './routes/market'
+import offersRouter from './routes/offers'
+import namesRouter from './routes/names'
+import { domaGraphql } from './domaClient'
 
 const app = express()
 

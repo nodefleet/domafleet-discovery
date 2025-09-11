@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { searchNames } from '@/services/doma'
+import { searchNames } from '@/services/backend'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type SearchItem = {
