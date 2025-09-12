@@ -66,6 +66,14 @@ export async function domaGraphql<T>(request: GraphQLRequest): Promise<T> {
 }
 
 export async function domaMarketplaceGraphql<T>(request: GraphQLRequest): Promise<T> {
+  // Validar que el endpoint de marketplace sea distinto al subgraph por defecto
+  if (config.doma.marketplaceEndpoint === config.doma.graphqlEndpoint) {
+    throw new DomaGraphQLError(
+      'DOMA_MARKETPLACE_ENDPOINT no configurado o apunta al subgraph. Define DOMA_MARKETPLACE_ENDPOINT a la URL del Marketplace GraphQL que soporta recommendDomains.',
+      { hint: 'Set DOMA_MARKETPLACE_ENDPOINT en backend/.env' },
+      400
+    )
+  }
   const client = createMarketplaceAxios()
   try {
     const { data } = await client.post('', request)

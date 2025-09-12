@@ -27,8 +27,8 @@ router.get('/metrics', async (req: any, res: any) => {
 router.post('/recommendations', async (req: any, res: any) => {
   try {
     const { names, minPrice, maxPrice, type } = req.body || {}
-    const queries = [
-      `query recommendDomains($names: [NameDescriptorInput!]!, $minPrice: Float, $maxPrice: Float, $type: MarketplaceFiltersTypeArg) {
+    const query = `
+      query recommendDomains($names: [NameDescriptorInput!]!, $minPrice: Float, $maxPrice: Float, $type: MarketplaceFiltersTypeArg) {
         recommendDomains(names: $names, minPrice: $minPrice, maxPrice: $maxPrice, type: $type) {
           available
           premium
@@ -54,100 +54,10 @@ router.post('/recommendations', async (req: any, res: any) => {
           registrant { id }
           tokenizationStatus
         }
-      }`,
-      `query recommendDomains($names: [NameDescriptorArg!]!, $minPrice: Float, $maxPrice: Float, $type: MarketplaceFiltersType) {
-        recommendDomains(names: $names, minPrice: $minPrice, maxPrice: $maxPrice, type: $type) {
-          available premium listing { fixedPrice minimumOfferPrice status }
-          pricing { primaryPricingInfo { remainingYearsPrice firstYearPrice adjustBy description nativeCurrencyFinalPrice } secondaryPricingInfo { price usdPrice minOfferPrice usdMinOfferPrice currency { decimals symbol icon evmCompatible id name } } }
-          chain { id addressType blockExplorerUrl name networkId currency { decimals symbol icon evmCompatible id name } }
-          sld tld eoi tokenized favoriteCount secondarySaleAvailable secondarySaleUnavailableReason unavailableReason saleType ownerName nearAccountEscrowed nearAccountAvailable reservationExpiresAt registrant { id } tokenizationStatus
-        }
-      }`,
-    ]
-
-    let lastError: unknown = null
-    for (const query of queries) {
-      try {
-        const data = await domaMarketplaceGraphql<{ recommendDomains: unknown[] }>({ query, variables: { names, minPrice, maxPrice, type } })
-        return res.json(data)
-      } catch (e) {
-        lastError = e
-        continue
       }
-    }
-
-    // Fallback: usar searchDomains cuando recommendDomains no exista/funcione
-    const searchQueries = [
-      `query searchDomains($names: [NameDescriptorInput!]!, $size: Int, $type: MarketplaceFiltersTypeArg, $minPrice: Float, $maxPrice: Float) {
-        searchDomains(
-          names: $names
-          size: $size
-          type: $type
-          minPrice: $minPrice
-          maxPrice: $maxPrice
-        ) {
-          items {
-            available premium listing { fixedPrice minimumOfferPrice status }
-            pricing { primaryPricingInfo { remainingYearsPrice firstYearPrice adjustBy description nativeCurrencyFinalPrice } secondaryPricingInfo { price usdPrice minOfferPrice usdMinOfferPrice currency { decimals symbol icon evmCompatible id name } } }
-            chain { id addressType blockExplorerUrl name networkId currency { decimals symbol icon evmCompatible id name } }
-            sld tld eoi tokenized favoriteCount secondarySaleAvailable secondarySaleUnavailableReason unavailableReason saleType ownerName nearAccountEscrowed nearAccountAvailable reservationExpiresAt registrant { id } tokenizationStatus
-          }
-        }
-      }`,
-      `query searchDomains($names: [NameDescriptorArg!]!, $size: Int, $type: MarketplaceFiltersType, $minPrice: Float, $maxPrice: Float) {
-        searchDomains(
-          names: $names
-          size: $size
-          type: $type
-          minPrice: $minPrice
-          maxPrice: $maxPrice
-        ) {
-          items {
-            available premium listing { fixedPrice minimumOfferPrice status }
-            pricing { primaryPricingInfo { remainingYearsPrice firstYearPrice adjustBy description nativeCurrencyFinalPrice } secondaryPricingInfo { price usdPrice minOfferPrice usdMinOfferPrice currency { decimals symbol icon evmCompatible id name } } }
-            chain { id addressType blockExplorerUrl name networkId currency { decimals symbol icon evmCompatible id name } }
-            sld tld eoi tokenized favoriteCount secondarySaleAvailable secondarySaleUnavailableReason unavailableReason saleType ownerName nearAccountEscrowed nearAccountAvailable reservationExpiresAt registrant { id } tokenizationStatus
-          }
-        }
-      }`,
-    ]
-
-    for (const query of searchQueries) {
-      try {
-        const data = await domaMarketplaceGraphql<{ searchDomains: { items: any[] } }>({
-          query,
-          variables: { names, size: 24, type, minPrice, maxPrice },
-        })
-        const mapped = (data.searchDomains?.items || []).map((it: any) => ({
-          available: it.available,
-          premium: it.premium,
-          listing: it.listing,
-          pricing: it.pricing,
-          chain: it.chain,
-          sld: it.sld,
-          tld: it.tld,
-          eoi: it.eoi,
-          tokenized: it.tokenized,
-          favoriteCount: it.favoriteCount,
-          secondarySaleAvailable: it.secondarySaleAvailable,
-          secondarySaleUnavailableReason: it.secondarySaleUnavailableReason,
-          unavailableReason: it.unavailableReason,
-          saleType: it.saleType,
-          ownerName: it.ownerName,
-          nearAccountEscrowed: it.nearAccountEscrowed,
-          nearAccountAvailable: it.nearAccountAvailable,
-          reservationExpiresAt: it.reservationExpiresAt,
-          registrant: it.registrant,
-          tokenizationStatus: it.tokenizationStatus,
-        }))
-        return res.json({ recommendDomains: mapped })
-      } catch (e) {
-        lastError = e
-        continue
-      }
-    }
-
-    throw lastError instanceof Error ? lastError : new Error('recommendations failed')
+    `
+    const data = await domaMarketplaceGraphql<{ recommendDomains: unknown[] }>({ query, variables: { names, minPrice, maxPrice, type } })
+    return res.json(data)
   } catch (err) {
     if (err instanceof DomaGraphQLError) return res.status(err.statusCode).json({ error: err.message, details: err.details })
     res.status(500).json({ error: (err as Error).message })
