@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { searchNames } from '@/services/backend'
+import { searchNames, getMarketplaceMetrics, recommendDomains } from '@/services/backend'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type SearchItem = {
@@ -56,6 +56,8 @@ export default function Marketplace() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchItem[]>([])
+  const [recommended, setRecommended] = useState<SearchItem[]>([])
+  const [metrics, setMetrics] = useState<Array<{ tld: string; sales24h: number; volume24h: number }>>([])
 
   // Filters
   const [selectedTlds, setSelectedTlds] = useState<string[]>(['ai', 'ape', 'com', 'football', 'io', 'shib'])
@@ -68,6 +70,19 @@ export default function Marketplace() {
   const [sortByDate, setSortByDate] = useState<'ASC' | 'DESC' | ''>('')
 
   useEffect(() => { setLoading(false) }, [])
+
+  // Load marketplace metrics once
+  useEffect(() => {
+    let mounted = true
+    getMarketplaceMetrics()
+      .then((r) => {
+        if (!mounted) return
+        const items = r.marketplaceMetrics.items || []
+        setMetrics(items as any)
+      })
+      .catch(() => { })
+    return () => { mounted = false }
+  }, [])
 
   const onSearchBySld = () => {
     const sld = query.trim()
@@ -109,6 +124,69 @@ export default function Marketplace() {
           }
         })
         setResults(items)
+
+        // Trigger recommendations based on the same input
+        return recommendDomains(
+          names,
+          {
+            minPrice: minPrice ? Number(minPrice) : undefined,
+            maxPrice: maxPrice ? Number(maxPrice) : undefined,
+            type: listedForSale ? 'LISTED' : undefined,
+          }
+        )
+      })
+      .then((r) => {
+        if (!r) return
+        const recItems = (r.recommendDomains || []).map((it: any) => ({
+          sld: it.sld,
+          tld: it.tld,
+          available: Boolean(it.available),
+          saleType: it.saleType || 'PRIMARY',
+          price:
+            it?.pricing?.secondaryPricingInfo?.price ??
+            it?.pricing?.primaryPricingInfo?.firstYearPrice ??
+            it?.pricing?.primaryPricingInfo?.remainingYearsPrice ??
+            null,
+        })) as SearchItem[]
+        setRecommended(recItems)
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setSearching(false))
+  }
+
+  const onRecommendations = () => {
+    const sld = query.trim()
+    let names: { sld: string; tld: string }[]
+    if (sld && sld.includes('.')) {
+      const parts = sld.split('.')
+      const tld = parts.pop()!.trim()
+      const sldOnly = parts.join('.').trim()
+      names = sldOnly && tld ? [{ sld: sldOnly, tld }] : []
+    } else if (sld) {
+      names = selectedTlds.map((tld) => ({ sld, tld }))
+    } else {
+      // If no input, propose generic by selected TLDs with empty sld
+      names = selectedTlds.map((tld) => ({ sld: '', tld }))
+    }
+    setSearching(true)
+    setError(null)
+    recommendDomains(names, {
+      minPrice: minPrice ? Number(minPrice) : undefined,
+      maxPrice: maxPrice ? Number(maxPrice) : undefined,
+      type: listedForSale ? 'LISTED' : undefined,
+    })
+      .then((r) => {
+        const items = (r.recommendDomains || []).map((it: any) => ({
+          sld: it.sld,
+          tld: it.tld,
+          available: Boolean(it.available),
+          saleType: it.saleType || 'PRIMARY',
+          price:
+            it?.pricing?.secondaryPricingInfo?.price ??
+            it?.pricing?.primaryPricingInfo?.firstYearPrice ??
+            null,
+        })) as SearchItem[]
+        setResults(items)
       })
       .catch((e) => setError(e.message))
       .finally(() => setSearching(false))
@@ -147,6 +225,39 @@ export default function Marketplace() {
         </p>
       </motion.div>
 
+      {/* Market metrics */}
+      <AnimatePresence>
+        {metrics.length > 0 && (
+          <motion.div
+            className="w-full max-w-4xl mx-auto relative z-10"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="relative bg-gradient-to-br from-dark-blue/60 via-dark-blue/40 to-navy-blue/60 backdrop-blur-sm border border-light-blue/30 rounded-2xl p-6 overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <i className="fa-solid fa-chart-line text-light-blue mr-2"></i>
+                  <h3 className="text-white font-semibold">Market Metrics (24h)</h3>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {metrics.slice(0, 6).map((m, i) => (
+                  <div key={i} className="rounded-xl border border-light-blue/20 bg-dark-blue/30 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-light-blue font-semibold">.{m.tld}</span>
+                      <i className="fa-solid fa-coins text-blue-300"></i>
+                    </div>
+                    <div className="text-blue-300 text-sm">Sales: <span className="text-white">{Number(m.sales24h || 0).toLocaleString()}</span></div>
+                    <div className="text-blue-300 text-sm">Volume: <span className="text-white">{Number(m.volume24h || 0).toLocaleString()}</span></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Search bar */}
       <motion.div 
         className="w-full max-w-4xl mx-auto relative z-10"
@@ -161,7 +272,7 @@ export default function Marketplace() {
             </div>
             <input 
               className="w-full p-4 pl-10 rounded-xl bg-dark-blue/30 border-2 border-light-blue/30 text-white placeholder-blue-300 focus:border-light-blue focus:outline-none transition-all duration-300"
-              placeholder="Search by domain name (e.g. example or example.com)" 
+              placeholder="Search by domain name (e.g., example or example.com)" 
               value={query} 
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onSearchBySld()}
@@ -182,6 +293,16 @@ export default function Marketplace() {
                 <><i className="fa-solid fa-rocket mr-2"></i> Search</>
               )}
             </div>
+          </motion.button>
+          <motion.button 
+            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-pink-500 hover:to-purple-500 text-white font-bold py-4 px-8 rounded-xl transition-all duration-500 shadow-lg hover:shadow-xl"
+            onClick={onRecommendations}
+            disabled={searching}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <i className="fa-solid fa-wand-magic-sparkles mr-2"></i>
+            Recommendations
           </motion.button>
         </div>
       </motion.div>
@@ -287,7 +408,7 @@ export default function Marketplace() {
                       checked={availableForOffer} 
                       onChange={(e) => setAvailableForOffer(e.target.checked)} 
                     />
-                    <span>Available for offer</span>
+                    <span>Available for offers</span>
                   </label>
                   <label className="flex items-center gap-2 text-blue-300 hover:text-white transition-colors duration-300 cursor-pointer">
                     <input 
@@ -442,6 +563,66 @@ export default function Marketplace() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
+                        View Details
+                        <i className="fa-solid fa-arrow-right ml-1"></i>
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Recommended */}
+      <AnimatePresence>
+        {recommended.length > 0 && (
+          <motion.div
+            className="w-full max-w-4xl mx-auto relative z-10"
+            initial="hidden"
+            animate="visible"
+            variants={containerVariants}
+          >
+            <div className="flex items-center justify-between mb-6 mt-8">
+              <div className="flex items-center">
+                <i className="fa-solid fa-wand-magic-sparkles text-light-blue mr-3"></i>
+                <h2 className="text-white text-xl font-bold">Recommended</h2>
+              </div>
+              <span className="text-blue-300 text-sm">{recommended.length} suggestions</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recommended.map((it, idx) => (
+                <motion.div
+                  key={idx}
+                  className="relative group bg-gradient-to-br from-dark-blue/70 via-dark-blue/50 to-navy-blue/70 backdrop-blur-sm border border-light-blue/20 rounded-2xl p-5 overflow-hidden"
+                  variants={itemVariants}
+                  whileHover={{ y: -8, boxShadow: '0px 25px 50px 0px rgba(85,154,208,0.30)', borderColor: 'rgba(85,154,208,0.4)' }}
+                  transition={{ type: 'spring', stiffness: 300 }}
+                  onClick={() => navigate(`/name/${encodeURIComponent(`${it.sld}.${it.tld}`)}`)}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 transform -skew-x-12 translate-x-[-100%] group-hover:translate-x-[100%]"></div>
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-light-blue via-blue-300 to-light-blue opacity-30 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xl font-bold text-white group-hover:text-light-blue transition-colors duration-300">
+                        {it.sld}.{it.tld}
+                      </h3>
+                      <div className={`text-xs px-2 py-1 rounded-full ${it.available ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                        {it.available ? 'Available' : 'Unavailable'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center text-blue-300 text-sm mb-4">
+                      <i className="fa-solid fa-tag mr-2"></i>
+                      <span>{it.price != null ? `${Number(it.price).toLocaleString()} USD` : 'Price on request'}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-blue-300/70">{it.saleType || 'PRIMARY'}</div>
+                      <motion.button className="text-light-blue hover:text-white text-sm flex items-center" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         View Details
                         <i className="fa-solid fa-arrow-right ml-1"></i>
                       </motion.button>

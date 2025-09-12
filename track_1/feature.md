@@ -13,49 +13,6 @@ $10,000 USDC + elegibilidad para fast-track de Doma Forge.
 
 ## Queries GraphQL Disponibles
 
-### Obtener información del dominio
-```graphql
-query GetDomainInfo($name: String!) {
-  name(name: $name) {
-    id
-    name
-    tokenId
-    owner
-    isActive
-    isListed
-    price { amount, currency, usdValue }
-  }
-}
-```
-
-### Obtener actividades recientes
-```graphql
-query GetDomainActivities($name: String!, $take: Int!) {
-  nameActivities(name: $name, take: $take, sortOrder: DESC) {
-    items {
-      type
-      timestamp
-      transactionHash
-      value
-    }
-  }
-}
-```
-
-### Obtener listados
-```graphql
-query GetDomainListings($sld: String!) {
-  listings(sld: $sld, take: 10) {
-    items {
-      price
-      currency
-      seller
-      createdAt
-    }
-  }
-}
-```
-
 ## Objetivos del Proyecto
 - Implementar mecanismos de subasta innovadores
 - Crear descubrimiento de precios transparente
