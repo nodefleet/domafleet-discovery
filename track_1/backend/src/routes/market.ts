@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { DomaGraphQLError, domaGraphql } from '../domaClient.js'
+import { DomaGraphQLError, domaGraphql, domaMarketplaceGraphql } from '../domaClient.js'
 
 const router = Router()
 
@@ -13,7 +13,7 @@ router.get('/metrics', async (req: any, res: any) => {
         }
       }
     `
-    const data = await domaGraphql<{ marketplaceMetrics: { items: unknown[] } }>({
+    const data = await domaMarketplaceGraphql<{ marketplaceMetrics: { items: unknown[] } }>({
       query,
       variables: { tld },
     })
@@ -68,7 +68,7 @@ router.post('/recommendations', async (req: any, res: any) => {
     let lastError: unknown = null
     for (const query of queries) {
       try {
-        const data = await domaGraphql<{ recommendDomains: unknown[] }>({ query, variables: { names, minPrice, maxPrice, type } })
+        const data = await domaMarketplaceGraphql<{ recommendDomains: unknown[] }>({ query, variables: { names, minPrice, maxPrice, type } })
         return res.json(data)
       } catch (e) {
         lastError = e
@@ -171,7 +171,7 @@ router.post('/search', async (req: any, res: any) => {
     let lastError: unknown = null
     for (const query of queries) {
       try {
-        const data = await domaGraphql({
+        const data = await domaMarketplaceGraphql({
           query,
           variables: {
             names,
