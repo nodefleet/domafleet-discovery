@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 
 const api = axios.create({
   // Usa el backend desplegado de DOMAFleet
@@ -7,6 +7,18 @@ const api = axios.create({
   timeout: 15000,
   withCredentials: false,
 })
+
+// Propagar mensajes de error del backend hacia el frontend
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const err = error as AxiosError<any>
+    const backendMessage = (err.response?.data as any)?.error || (err.response?.data as any)?.message
+    const statusText = err.response ? `${err.response.status}` : ''
+    const message = backendMessage || err.message || 'Request failed'
+    return Promise.reject(new Error(statusText ? `${statusText}: ${message}` : message))
+  }
+)
 
 export type NameDescriptor = { sld: string; tld: string }
 
