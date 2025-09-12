@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { searchNames, getMarketplaceMetrics, recommendDomains } from '@/services/backend'
+import { searchNames, getMarketplaceMetrics } from '@/services/backend'
+import { addToCart } from '@/services/cart'
+import { flyToCart } from '@/services/flyToCart'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type SearchItem = {
@@ -39,8 +41,8 @@ const itemVariants = {
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: {
       duration: 0.6,
@@ -56,7 +58,6 @@ export default function Marketplace() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchItem[]>([])
-  const [recommended, setRecommended] = useState<SearchItem[]>([])
   const [metrics, setMetrics] = useState<Array<{ tld: string; sales24h: number; volume24h: number }>>([])
 
   // Filters
@@ -68,6 +69,10 @@ export default function Marketplace() {
   const [isNew, setIsNew] = useState<boolean>(false)
   const [sortByPrice, setSortByPrice] = useState<'ASC' | 'DESC' | ''>('')
   const [sortByDate, setSortByDate] = useState<'ASC' | 'DESC' | ''>('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
 
   useEffect(() => { setLoading(false) }, [])
 
@@ -92,7 +97,7 @@ export default function Marketplace() {
     }
     setSearching(true)
     setError(null)
-    
+
     // Build names array for searchDomains from input
     let names: { sld: string; tld: string }[]
     if (sld.includes('.')) {
@@ -111,7 +116,8 @@ export default function Marketplace() {
 
     const nameFilter = names.length === 1 ? `${names[0].sld}.${names[0].tld}` : undefined
     const tlds = nameFilter ? undefined : selectedTlds
-    searchNames({ name: nameFilter, tlds, take: 48, sortOrder: sortByDate || undefined })
+    setPage(1)
+    searchNames({ name: nameFilter, tlds, take: pageSize, skip: 0, sortOrder: sortByDate || undefined })
       .then((r) => {
         const items = r.names.items.map((n) => {
           const [sldPart, ...rest] = n.name.split('.')
@@ -124,81 +130,42 @@ export default function Marketplace() {
           }
         })
         setResults(items)
-
-        // Trigger recommendations based on the same input
-        return recommendDomains(
-          names,
-          {
-            minPrice: minPrice ? Number(minPrice) : undefined,
-            maxPrice: maxPrice ? Number(maxPrice) : undefined,
-            type: listedForSale ? 'LISTED' : undefined,
-          }
-        )
-      })
-      .then((r) => {
-        if (!r) return
-        const recItems = (r.recommendDomains || []).map((it: any) => ({
-          sld: it.sld,
-          tld: it.tld,
-          available: Boolean(it.available),
-          saleType: it.saleType || 'PRIMARY',
-          price:
-            it?.pricing?.secondaryPricingInfo?.price ??
-            it?.pricing?.primaryPricingInfo?.firstYearPrice ??
-            it?.pricing?.primaryPricingInfo?.remainingYearsPrice ??
-            null,
-        })) as SearchItem[]
-        setRecommended(recItems)
+        setTotalPages(r.names.totalPages || 0)
+        setTotalCount(r.names.totalCount || items.length)
       })
       .catch((e) => setError(e.message))
       .finally(() => setSearching(false))
   }
 
-  const onRecommendations = () => {
-    const sld = query.trim()
-    let names: { sld: string; tld: string }[]
-    if (sld && sld.includes('.')) {
-      const parts = sld.split('.')
-      const tld = parts.pop()!.trim()
-      const sldOnly = parts.join('.').trim()
-      names = sldOnly && tld ? [{ sld: sldOnly, tld }] : []
-    } else if (sld) {
-      names = selectedTlds.map((tld) => ({ sld, tld }))
-    } else {
-      // If no input, propose generic by selected TLDs with empty sld
-      names = selectedTlds.map((tld) => ({ sld: '', tld }))
-    }
+  const goToPage = (target: number) => {
+    const nameFilter = query.includes('.') ? query.trim() : undefined
+    const tlds = nameFilter ? undefined : selectedTlds
+    const clamped = Math.max(1, Math.min(totalPages || 1, target))
     setSearching(true)
-    setError(null)
-    recommendDomains(names, {
-      minPrice: minPrice ? Number(minPrice) : undefined,
-      maxPrice: maxPrice ? Number(maxPrice) : undefined,
-      type: listedForSale ? 'LISTED' : undefined,
-    })
+    searchNames({ name: nameFilter, tlds, take: pageSize, skip: (clamped - 1) * pageSize, sortOrder: sortByDate || undefined })
       .then((r) => {
-        const items = (r.recommendDomains || []).map((it: any) => ({
-          sld: it.sld,
-          tld: it.tld,
-          available: Boolean(it.available),
-          saleType: it.saleType || 'PRIMARY',
-          price:
-            it?.pricing?.secondaryPricingInfo?.price ??
-            it?.pricing?.primaryPricingInfo?.firstYearPrice ??
-            null,
-        })) as SearchItem[]
+        const items = r.names.items.map((n) => {
+          const [sldPart, ...rest] = n.name.split('.')
+          return { sld: sldPart, tld: rest.join('.'), available: true, saleType: 'PRIMARY', price: null }
+        })
         setResults(items)
+        setTotalPages(r.names.totalPages || 0)
+        setTotalCount(r.names.totalCount || items.length)
+        setPage(clamped)
       })
       .catch((e) => setError(e.message))
       .finally(() => setSearching(false))
   }
+
+  // Removed recommendations logic
 
   return (
-    <section className="md:min-h-screen flex flex-col items-center justify-start bg-gradient-primary gap-6 md:gap-8 pt-6 md:pt-10 px-3 md:px-4 relative overflow-hidden">
+    <section className="md:min-h-screen flex flex-col items-center justify-start gap-6 ">
       {/* Background Effects */}
-      <div className="absolute inset-0 bg-gradient-to-br from-light-blue/5 via-transparent to-blue-300/5"></div>
-      <div className="absolute top-20 left-10 w-72 h-72 bg-light-blue/10 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-300/10 rounded-full blur-3xl animate-pulse"></div>
-      
+      <div className="absolute inset-0 bg-gradient-to-br from-light-blue/5 via-transparent to-blue-300/5 pointer-events-none"></div>
+      <div className="absolute top-20 left-10 w-72 h-72 bg-light-blue/10 rounded-full blur-3xl animate-pulse pointer-events-none"></div>
+      <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-300/10 rounded-full blur-3xl animate-pulse pointer-events-none"></div>
+
       <motion.div
         className="mb-8 md:mb-12 relative z-10 text-center"
         initial="hidden"
@@ -259,7 +226,7 @@ export default function Marketplace() {
       </AnimatePresence>
 
       {/* Search bar */}
-      <motion.div 
+      <motion.div
         className="w-full max-w-4xl mx-auto relative z-10"
         initial="hidden"
         animate="visible"
@@ -270,17 +237,17 @@ export default function Marketplace() {
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <i className="fa-solid fa-search text-blue-300"></i>
             </div>
-            <input 
+            <input
               className="w-full p-4 pl-10 rounded-xl bg-dark-blue/30 border-2 border-light-blue/30 text-white placeholder-blue-300 focus:border-light-blue focus:outline-none transition-all duration-300"
-              placeholder="Search by domain name (e.g., example or example.com)" 
-              value={query} 
+              placeholder="Search by domain name (e.g., example or example.com)"
+              value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onSearchBySld()}
             />
           </div>
-          <motion.button 
+          <motion.button
             className="bg-gradient-to-r from-light-blue to-blue-300 hover:from-blue-300 hover:to-light-blue text-white font-bold py-4 px-8 rounded-xl transition-all duration-500 shadow-lg hover:shadow-xl overflow-hidden relative"
-            onClick={onSearchBySld} 
+            onClick={onSearchBySld}
             disabled={searching}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -294,27 +261,18 @@ export default function Marketplace() {
               )}
             </div>
           </motion.button>
-          <motion.button 
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-pink-500 hover:to-purple-500 text-white font-bold py-4 px-8 rounded-xl transition-all duration-500 shadow-lg hover:shadow-xl"
-            onClick={onRecommendations}
-            disabled={searching}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <i className="fa-solid fa-wand-magic-sparkles mr-2"></i>
-            Recommendations
-          </motion.button>
+          {/* Recommendations button removed */}
         </div>
       </motion.div>
 
       {/* Filters */}
-      <motion.div 
+      <motion.div
         className="w-full max-w-4xl mx-auto relative z-10"
         initial="hidden"
         animate="visible"
         variants={fadeInUp}
       >
-        <motion.div 
+        <motion.div
           className="relative bg-gradient-to-br from-dark-blue/70 via-dark-blue/50 to-navy-blue/70 backdrop-blur-sm border border-light-blue/30 rounded-2xl p-6 md:p-8 overflow-hidden group"
           whileHover={{
             boxShadow: "0px 10px 30px rgba(85,154,208,0.20)",
@@ -322,7 +280,7 @@ export default function Marketplace() {
         >
           {/* Animated Background */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 transform -skew-x-12 translate-x-[-100%] group-hover:translate-x-[100%]"></div>
-          
+
           {/* Top Accent Line */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-light-blue via-blue-300 to-light-blue opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
 
@@ -337,26 +295,25 @@ export default function Marketplace() {
               <div>
                 <label className="text-white text-sm font-medium mb-2 block">TLDs</label>
                 <div className="flex flex-wrap gap-2">
-                  {['ai','ape','com','football','io','shib'].map((tld) => (
-                    <motion.label 
-                      key={tld} 
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border transition-all duration-300 cursor-pointer ${
-                        selectedTlds.includes(tld) 
-                          ? 'bg-light-blue/20 border-light-blue/40 text-white' 
-                          : 'bg-dark-blue/40 border-light-blue/10 text-blue-300'
-                      }`}
+                  {['ai', 'ape', 'com', 'football', 'io', 'shib'].map((tld) => (
+                    <motion.label
+                      key={tld}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border transition-all duration-300 cursor-pointer ${selectedTlds.includes(tld)
+                        ? 'bg-light-blue/20 border-light-blue/40 text-white'
+                        : 'bg-dark-blue/40 border-light-blue/10 text-blue-300'
+                        }`}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.98 }}
                     >
-                      <input 
-                        type="checkbox" 
-                        className="hidden" 
-                        checked={selectedTlds.includes(tld)} 
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={selectedTlds.includes(tld)}
                         onChange={(e) => {
-                          setSelectedTlds((prev) => e.target.checked 
-                            ? [...prev, tld] 
+                          setSelectedTlds((prev) => e.target.checked
+                            ? [...prev, tld]
                             : prev.filter((x) => x !== tld))
-                        }} 
+                        }}
                       />
                       <i className={`fa-${selectedTlds.includes(tld) ? 'solid' : 'regular'} fa-circle-check mr-1 text-xs`}></i>
                       .{tld}
@@ -373,12 +330,12 @@ export default function Marketplace() {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <i className="fa-solid fa-dollar-sign text-blue-300/70 text-sm"></i>
                     </div>
-                    <input 
+                    <input
                       className="w-full p-2 pl-8 rounded-lg bg-dark-blue/30 border border-light-blue/30 text-white placeholder-blue-300/70 focus:border-light-blue focus:outline-none transition-all duration-300"
-                      type="number" 
-                      placeholder="Min" 
-                      value={minPrice} 
-                      onChange={(e) => setMinPrice(e.target.value)} 
+                      type="number"
+                      placeholder="Min"
+                      value={minPrice}
+                      onChange={(e) => setMinPrice(e.target.value)}
                     />
                   </div>
                   <span className="text-blue-300">-</span>
@@ -386,12 +343,12 @@ export default function Marketplace() {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <i className="fa-solid fa-dollar-sign text-blue-300/70 text-sm"></i>
                     </div>
-                    <input 
+                    <input
                       className="w-full p-2 pl-8 rounded-lg bg-dark-blue/30 border border-light-blue/30 text-white placeholder-blue-300/70 focus:border-light-blue focus:outline-none transition-all duration-300"
-                      type="number" 
-                      placeholder="Max" 
-                      value={maxPrice} 
-                      onChange={(e) => setMaxPrice(e.target.value)} 
+                      type="number"
+                      placeholder="Max"
+                      value={maxPrice}
+                      onChange={(e) => setMaxPrice(e.target.value)}
                     />
                   </div>
                 </div>
@@ -402,29 +359,29 @@ export default function Marketplace() {
                 <label className="text-white text-sm font-medium mb-2 block">Options</label>
                 <div className="flex flex-wrap gap-3">
                   <label className="flex items-center gap-2 text-blue-300 hover:text-white transition-colors duration-300 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="form-checkbox h-4 w-4 rounded border-light-blue/30 text-light-blue focus:ring-light-blue bg-dark-blue/30" 
-                      checked={availableForOffer} 
-                      onChange={(e) => setAvailableForOffer(e.target.checked)} 
+                    <input
+                      type="checkbox"
+                      className="form-checkbox h-4 w-4 rounded border-light-blue/30 text-light-blue focus:ring-light-blue bg-dark-blue/30"
+                      checked={availableForOffer}
+                      onChange={(e) => setAvailableForOffer(e.target.checked)}
                     />
                     <span>Available for offers</span>
                   </label>
                   <label className="flex items-center gap-2 text-blue-300 hover:text-white transition-colors duration-300 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="form-checkbox h-4 w-4 rounded border-light-blue/30 text-light-blue focus:ring-light-blue bg-dark-blue/30" 
-                      checked={listedForSale} 
-                      onChange={(e) => setListedForSale(e.target.checked)} 
+                    <input
+                      type="checkbox"
+                      className="form-checkbox h-4 w-4 rounded border-light-blue/30 text-light-blue focus:ring-light-blue bg-dark-blue/30"
+                      checked={listedForSale}
+                      onChange={(e) => setListedForSale(e.target.checked)}
                     />
                     <span>Listed for sale</span>
                   </label>
                   <label className="flex items-center gap-2 text-blue-300 hover:text-white transition-colors duration-300 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="form-checkbox h-4 w-4 rounded border-light-blue/30 text-light-blue focus:ring-light-blue bg-dark-blue/30" 
-                      checked={isNew} 
-                      onChange={(e) => setIsNew(e.target.checked)} 
+                    <input
+                      type="checkbox"
+                      className="form-checkbox h-4 w-4 rounded border-light-blue/30 text-light-blue focus:ring-light-blue bg-dark-blue/30"
+                      checked={isNew}
+                      onChange={(e) => setIsNew(e.target.checked)}
                     />
                     <span>New listings</span>
                   </label>
@@ -435,18 +392,18 @@ export default function Marketplace() {
               <div>
                 <label className="text-white text-sm font-medium mb-2 block">Sort By</label>
                 <div className="flex items-center gap-3">
-                  <select 
+                  <select
                     className="flex-1 p-2 rounded-lg bg-dark-blue/30 border border-light-blue/30 text-white focus:border-light-blue focus:outline-none transition-all duration-300"
-                    value={sortByPrice} 
+                    value={sortByPrice}
                     onChange={(e) => setSortByPrice(e.target.value as any)}
                   >
                     <option value="">Sort by price</option>
                     <option value="ASC">Price: Low to High</option>
                     <option value="DESC">Price: High to Low</option>
                   </select>
-                  <select 
+                  <select
                     className="flex-1 p-2 rounded-lg bg-dark-blue/30 border border-light-blue/30 text-white focus:border-light-blue focus:outline-none transition-all duration-300"
-                    value={sortByDate} 
+                    value={sortByDate}
                     onChange={(e) => setSortByDate(e.target.value as any)}
                   >
                     <option value="">Sort by date</option>
@@ -463,13 +420,13 @@ export default function Marketplace() {
       {/* Loading */}
       <AnimatePresence>
         {loading && (
-          <motion.div 
+          <motion.div
             className="w-full max-w-4xl mx-auto text-center py-12"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <motion.div 
+            <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
               className="inline-block"
@@ -484,7 +441,7 @@ export default function Marketplace() {
       {/* Error */}
       <AnimatePresence>
         {error && (
-          <motion.div 
+          <motion.div
             className="w-full max-w-4xl mx-auto"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -501,7 +458,7 @@ export default function Marketplace() {
       {/* Results */}
       <AnimatePresence>
         {results.length > 0 && (
-          <motion.div 
+          <motion.div
             className="w-full max-w-4xl mx-auto relative z-10"
             initial="hidden"
             animate="visible"
@@ -512,116 +469,69 @@ export default function Marketplace() {
                 <i className="fa-solid fa-list text-light-blue mr-3"></i>
                 <h2 className="text-white text-xl font-bold">Search Results</h2>
               </div>
-              <span className="text-blue-300 text-sm">{results.length} domains found</span>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="text-blue-300">{totalCount.toLocaleString()} domains</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-300">Per page</span>
+                  <select
+                    className="px-2 py-1 rounded-lg bg-dark-blue/30 border border-light-blue/30 text-white"
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); goToPage(1) }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {results.map((it, idx) => (
-                <motion.div 
-                  key={idx} 
-                  className="relative group bg-gradient-to-br from-dark-blue/70 via-dark-blue/50 to-navy-blue/70 backdrop-blur-sm border border-light-blue/20 rounded-2xl p-5 overflow-hidden"
-                  variants={itemVariants}
-                  whileHover={{ 
-                    y: -8, 
-                    boxShadow: "0px 25px 50px 0px rgba(85,154,208,0.30)",
-                    borderColor: "rgba(85,154,208,0.4)"
-                  }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                  onClick={() => navigate(`/name/${encodeURIComponent(`${it.sld}.${it.tld}`)}`)}
-                >
-                  {/* Animated Background */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 transform -skew-x-12 translate-x-[-100%] group-hover:translate-x-[100%]"></div>
-                  
-                  {/* Top Accent Line */}
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-light-blue via-blue-300 to-light-blue opacity-30 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xl font-bold text-white group-hover:text-light-blue transition-colors duration-300">
-                        {it.sld}.{it.tld}
-                      </h3>
-                      <div className={`text-xs px-2 py-1 rounded-full ${
-                        it.available 
-                          ? 'bg-green-500/20 text-green-400' 
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {it.available ? 'Available' : 'Unavailable'}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center text-blue-300 text-sm mb-4">
-                      <i className="fa-solid fa-tag mr-2"></i>
-                      <span>{it.price != null ? `${Number(it.price).toLocaleString()} USD` : 'Price on request'}</span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-blue-300/70">
-                        {it.saleType || 'PRIMARY'}
-                      </div>
-                      <motion.button 
-                        className="text-light-blue hover:text-white text-sm flex items-center"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        View Details
-                        <i className="fa-solid fa-arrow-right ml-1"></i>
-                      </motion.button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Recommended */}
-      <AnimatePresence>
-        {recommended.length > 0 && (
-          <motion.div
-            className="w-full max-w-4xl mx-auto relative z-10"
-            initial="hidden"
-            animate="visible"
-            variants={containerVariants}
-          >
-            <div className="flex items-center justify-between mb-6 mt-8">
-              <div className="flex items-center">
-                <i className="fa-solid fa-wand-magic-sparkles text-light-blue mr-3"></i>
-                <h2 className="text-white text-xl font-bold">Recommended</h2>
-              </div>
-              <span className="text-blue-300 text-sm">{recommended.length} suggestions</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recommended.map((it, idx) => (
                 <motion.div
                   key={idx}
-                  className="relative group bg-gradient-to-br from-dark-blue/70 via-dark-blue/50 to-navy-blue/70 backdrop-blur-sm border border-light-blue/20 rounded-2xl p-5 overflow-hidden"
+                  className="relative group rounded-2xl overflow-hidden border border-light-blue/20 bg-gradient-to-b from-[#0b1828]/70 to-[#0f2238]/70 backdrop-blur-sm p-5 hover:ring-1 hover:ring-light-blue/40 shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
                   variants={itemVariants}
-                  whileHover={{ y: -8, boxShadow: '0px 25px 50px 0px rgba(85,154,208,0.30)', borderColor: 'rgba(85,154,208,0.4)' }}
+                  whileHover={{ y: -8, boxShadow: '0px 25px 50px rgba(85,154,208,0.30)' }}
                   transition={{ type: 'spring', stiffness: 300 }}
                   onClick={() => navigate(`/name/${encodeURIComponent(`${it.sld}.${it.tld}`)}`)}
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 transform -skew-x-12 translate-x-[-100%] group-hover:translate-x-[100%]"></div>
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-light-blue via-blue-300 to-light-blue opacity-30 group-hover:opacity-100 transition-opacity duration-500"></div>
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-light-blue via-blue-300 to-light-blue opacity-20 group-hover:opacity-60 transition-opacity duration-500"></div>
 
                   <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xl font-bold text-white group-hover:text-light-blue transition-colors duration-300">
-                        {it.sld}.{it.tld}
-                      </h3>
-                      <div className={`text-xs px-2 py-1 rounded-full ${it.available ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-light-blue/30 to-blue-300/20 flex items-center justify-center text-light-blue shadow-inner"><i className="fa-solid fa-globe"></i></div>
+                        <h3 className="text-lg md:text-xl font-bold text-white group-hover:text-light-blue transition-colors duration-300 truncate">
+                          {it.sld}.{it.tld}
+                        </h3>
+                      </div>
+                      <div className={`text-xs px-2 py-1 rounded-full border ${it.available ? 'bg-green-500/10 text-green-400 border-green-400/30' : 'bg-red-500/10 text-red-400 border-red-400/30'}`}>
                         {it.available ? 'Available' : 'Unavailable'}
                       </div>
                     </div>
 
-                    <div className="flex items-center text-blue-300 text-sm mb-4">
-                      <i className="fa-solid fa-tag mr-2"></i>
-                      <span>{it.price != null ? `${Number(it.price).toLocaleString()} USD` : 'Price on request'}</span>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center text-blue-300 text-sm">
+                        <i className="fa-solid fa-tag mr-2"></i>
+                        <span className="text-white font-semibold">{it.price != null ? `${Number(it.price).toLocaleString()} USD` : 'Price on request'}</span>
+                      </div>
+                      <motion.button
+                        className="px-3 py-1.5 rounded-lg border border-light-blue/40 text-light-blue hover:text-white hover:border-light-blue bg-dark-blue/30"
+                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.96 }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          addToCart({ name: `${it.sld}.${it.tld}`, type: it.saleType === 'PRIMARY' ? 'PRIMARY' : 'SECONDARY', price: it.price, currency: 'USD', addedAt: Date.now() })
+                          const btn = e.currentTarget as unknown as HTMLElement
+                          flyToCart(btn)
+                        }}
+                      >
+                        <i className="fa-solid fa-cart-plus mr-1"></i> Add
+                      </motion.button>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-blue-300/70">{it.saleType || 'PRIMARY'}</div>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="px-2 py-1 rounded-md bg-dark-blue/40 border border-light-blue/20 text-blue-300">{it.saleType || 'PRIMARY'}</div>
                       <motion.button className="text-light-blue hover:text-white text-sm flex items-center" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         View Details
                         <i className="fa-solid fa-arrow-right ml-1"></i>
@@ -634,11 +544,36 @@ export default function Marketplace() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Pagination */}
+      <div className="w-full max-w-4xl mx-auto mt-6 mb-10">
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-blue-300">Page {page} of {totalPages}</div>
+            <div className="flex items-center gap-2">
+              <button className="px-3 py-1 rounded-lg bg-dark-blue/40 border border-light-blue/30 text-white disabled:opacity-50" disabled={page === 1 || searching} onClick={() => goToPage(1)}>First</button>
+              <button className="px-3 py-1 rounded-lg bg-dark-blue/40 border border-light-blue/30 text-white disabled:opacity-50" disabled={page === 1 || searching} onClick={() => goToPage(page - 1)}>Prev</button>
+              {Array.from({ length: Math.min(5, totalPages) }).map((_, idx) => {
+                const start = Math.max(1, Math.min(page - 2, totalPages - 4))
+                const num = start + idx
+                return (
+                  <button key={num} className={`px-3 py-1 rounded-lg border ${num === page ? 'bg-light-blue text-white border-light-blue' : 'bg-dark-blue/40 text-white border-light-blue/30'}`} disabled={searching} onClick={() => goToPage(num)}>
+                    {num}
+                  </button>
+                )
+              })}
+              <button className="px-3 py-1 rounded-lg bg-dark-blue/40 border border-light-blue/30 text-white disabled:opacity-50" disabled={page === totalPages || searching} onClick={() => goToPage(page + 1)}>Next</button>
+              <button className="px-3 py-1 rounded-lg bg-dark-blue/40 border border-light-blue/30 text-white disabled:opacity-50" disabled={page === totalPages || searching} onClick={() => goToPage(totalPages)}>Last</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Recommendations section removed */}
 
       {/* No Results State */}
       <AnimatePresence>
         {!loading && !error && query && results.length === 0 && (
-          <motion.div 
+          <motion.div
             className="w-full max-w-4xl mx-auto text-center py-12"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -652,7 +587,7 @@ export default function Marketplace() {
       </AnimatePresence>
 
       {/* CTA Section */}
-      <motion.div 
+      <motion.div
         className="w-full max-w-4xl mx-auto mt-12 mb-8 relative z-10"
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
@@ -683,16 +618,18 @@ export default function Marketplace() {
               Explore our marketplace for premium domains with transparent pricing and on-chain auctions
             </p>
 
-            <motion.button
+            <motion.a
               className="inline-flex items-center bg-gradient-to-r from-light-blue to-blue-300 hover:from-blue-300 hover:to-light-blue text-white font-semibold py-4 px-8 rounded-xl transition-all duration-500 shadow-lg hover:shadow-2xl overflow-hidden group/btn"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              href="https://marketplace.domafleet.io"
+              target="_blank"
               transition={{ type: "spring", stiffness: 400 }}
             >
               <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"></div>
               <i className="fa-solid fa-globe mr-2 relative z-10"></i>
               <span className="relative z-10">Browse All Domains</span>
-            </motion.button>
+            </motion.a>
           </div>
         </div>
       </motion.div>

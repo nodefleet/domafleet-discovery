@@ -24,45 +24,48 @@ router.get('/metrics', async (req: any, res: any) => {
   }
 })
 
-router.post('/recommendations', async (req: any, res: any) => {
+// Price/listings by name (sld + tld)
+router.get('/listings-by-name', async (req: any, res: any) => {
   try {
-    const { names, minPrice, maxPrice, type } = req.body || {}
+    const name = (req.query.name as string | undefined) || undefined
+    let sld: string | undefined
+    let tld: string | undefined
+    if (name && name.includes('.')) {
+      const parts = name.split('.')
+      tld = parts.pop()?.trim()
+      sld = parts.join('.').trim()
+    } else {
+      sld = (req.query.sld as string | undefined) || undefined
+      tld = (req.query.tld as string | undefined) || undefined
+    }
+
     const query = `
-      query recommendDomains($names: [NameDescriptorInput!]!, $minPrice: Float, $maxPrice: Float, $type: MarketplaceFiltersTypeArg) {
-        recommendDomains(names: $names, minPrice: $minPrice, maxPrice: $maxPrice, type: $type) {
-          available
-          premium
-          listing { fixedPrice minimumOfferPrice status }
-          pricing {
-            primaryPricingInfo { remainingYearsPrice firstYearPrice adjustBy description nativeCurrencyFinalPrice }
-            secondaryPricingInfo { price usdPrice minOfferPrice usdMinOfferPrice currency { decimals symbol icon evmCompatible id name } }
+      query Listings($take: Int, $tlds: [String!], $sld: String) {
+        listings(take: $take, tlds: $tlds, sld: $sld) {
+          items {
+            id
+            price
+            createdAt
+            currency { symbol decimals }
+            name
           }
-          chain { id addressType blockExplorerUrl name networkId currency { decimals symbol icon evmCompatible id name } }
-          sld
-          tld
-          eoi
-          tokenized
-          favoriteCount
-          secondarySaleAvailable
-          secondarySaleUnavailableReason
-          unavailableReason
-          saleType
-          ownerName
-          nearAccountEscrowed
-          nearAccountAvailable
-          reservationExpiresAt
-          registrant { id }
-          tokenizationStatus
+          totalCount
         }
       }
     `
-    const data = await domaMarketplaceGraphql<{ recommendDomains: unknown[] }>({ query, variables: { names, minPrice, maxPrice, type } })
-    return res.json(data)
+
+    const data = await domaGraphql<{ listings: { items: Array<{ id: string; price: string; currency?: { symbol?: string; decimals?: number }; name?: string }> } }>({
+      query,
+      variables: { take: 1, tlds: tld ? [tld] : undefined, sld },
+    })
+    res.json(data)
   } catch (err) {
     if (err instanceof DomaGraphQLError) return res.status(err.statusCode).json({ error: err.message, details: err.details })
     res.status(500).json({ error: (err as Error).message })
   }
 })
+
+// Recommendations endpoint removed per product decision
 
 router.post('/search', async (req: any, res: any) => {
   try {

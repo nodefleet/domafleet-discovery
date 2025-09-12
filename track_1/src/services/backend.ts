@@ -77,6 +77,19 @@ export async function getMarketplaceMetrics(tld?: string) {
   return data as { marketplaceMetrics: { items: unknown[] } }
 }
 
+export async function getListingByName(name: string) {
+  const qs = new URLSearchParams({ name }).toString()
+  const { data } = await api.get(`/api/market/listings-by-name?${qs}`)
+  return data as {
+    listings: { items: Array<{ id: string; price: string; currency?: { symbol?: string; decimals?: number }; name?: string }>; totalCount: number }
+  }
+}
+
+export async function createAuction(payload: { name: string; startingPrice: number; minIncrement: number; endsAt: string }) {
+  // Simulated endpoint (placeholder). Replace with real orderbook integration when available.
+  return Promise.resolve({ ok: true, auctionId: Math.random().toString(36).slice(2, 8), ...payload })
+}
+
 export async function recommendDomains(names: NameDescriptor[], opts?: { minPrice?: number; maxPrice?: number; type?: string }) {
   const { data } = await api.post('/api/market/recommendations', {
     names,
