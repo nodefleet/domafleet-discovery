@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios'
+import axios, { AxiosError, AxiosInstance } from 'axios'
 import { config } from './config.js'
 
 export class DomaGraphQLError extends Error {
@@ -46,26 +46,44 @@ export type GraphQLRequest = {
 
 export async function domaGraphql<T>(request: GraphQLRequest): Promise<T> {
   const client = createDomaAxios()
-  const { data } = await client.post('', request)
-
-  if (data?.errors) {
-    const message = Array.isArray(data.errors) ? (data.errors[0]?.message || 'GraphQL error') : String(data.errors)
-    throw new DomaGraphQLError(message, data.errors, 400)
+  try {
+    const { data } = await client.post('', request)
+    if (data?.errors) {
+      const message = Array.isArray(data.errors) ? (data.errors[0]?.message || 'GraphQL error') : String(data.errors)
+      throw new DomaGraphQLError(message, data.errors, 400)
+    }
+    return data.data as T
+  } catch (e) {
+    const err = e as AxiosError<any>
+    if (err.response) {
+      const status = err.response.status
+      const body = err.response.data
+      const message = body?.errors?.[0]?.message || body?.message || err.message || 'Request failed'
+      throw new DomaGraphQLError(message, body?.errors || body, status)
+    }
+    throw e
   }
-
-  return data.data as T
 }
 
 export async function domaMarketplaceGraphql<T>(request: GraphQLRequest): Promise<T> {
   const client = createMarketplaceAxios()
-  const { data } = await client.post('', request)
-
-  if (data?.errors) {
-    const message = Array.isArray(data.errors) ? (data.errors[0]?.message || 'GraphQL error') : String(data.errors)
-    throw new DomaGraphQLError(message, data.errors, 400)
+  try {
+    const { data } = await client.post('', request)
+    if (data?.errors) {
+      const message = Array.isArray(data.errors) ? (data.errors[0]?.message || 'GraphQL error') : String(data.errors)
+      throw new DomaGraphQLError(message, data.errors, 400)
+    }
+    return data.data as T
+  } catch (e) {
+    const err = e as AxiosError<any>
+    if (err.response) {
+      const status = err.response.status
+      const body = err.response.data
+      const message = body?.errors?.[0]?.message || body?.message || err.message || 'Request failed'
+      throw new DomaGraphQLError(message, body?.errors || body, status)
+    }
+    throw e
   }
-
-  return data.data as T
 }
 
 
