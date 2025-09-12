@@ -1,6 +1,17 @@
 import axios, { AxiosInstance } from 'axios'
 import { config } from './config.js'
 
+export class DomaGraphQLError extends Error {
+  statusCode: number
+  details?: unknown
+  constructor(message: string, details?: unknown, statusCode = 400) {
+    super(message)
+    this.name = 'DomaGraphQLError'
+    this.statusCode = statusCode
+    this.details = details
+  }
+}
+
 export function createDomaAxios(): AxiosInstance {
   const instance = axios.create({
     baseURL: config.doma.graphqlEndpoint,
@@ -25,8 +36,8 @@ export async function domaGraphql<T>(request: GraphQLRequest): Promise<T> {
   const { data } = await client.post('', request)
 
   if (data?.errors) {
-    const message = Array.isArray(data.errors) ? JSON.stringify(data.errors) : String(data.errors)
-    throw new Error(`DOMA GraphQL errors: ${message}`)
+    const message = Array.isArray(data.errors) ? (data.errors[0]?.message || 'GraphQL error') : String(data.errors)
+    throw new DomaGraphQLError(message, data.errors, 400)
   }
 
   return data.data as T

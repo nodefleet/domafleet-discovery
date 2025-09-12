@@ -12,6 +12,8 @@ export const config = {
   doma: {
     graphqlEndpoint:
       process.env.DOMA_GRAPHQL_ENDPOINT || 'https://api-testnet.doma.xyz/graphql',
+    marketplaceEndpoint:
+      process.env.DOMA_MARKETPLACE_ENDPOINT || process.env.DOMA_GRAPHQL_ENDPOINT || 'https://api-testnet.doma.xyz/graphql',
     apiKey: process.env.DOMA_API_KEY || '',
   },
 }
